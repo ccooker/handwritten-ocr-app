@@ -4,6 +4,8 @@ A web application for uploading images with handwritten data, extracting text us
 
 ## 🌐 URLs
 
+- **Production**: https://webapp-38q.pages.dev
+- **Latest Deployment**: https://265d4d66.webapp-38q.pages.dev
 - **Local Development**: http://localhost:3000
 - **Sandbox Demo**: https://3000-i7nnw5p0uh2hjnfz0320a-ad490db5.sandbox.novita.ai
 - **API Endpoints**:
@@ -302,9 +304,12 @@ npx wrangler pages secret put OCR_API_KEY --project-name webapp
 ### Deployment Status
 
 - **Platform**: Cloudflare Pages
-- **Status**: ✅ Ready for deployment
+- **Status**: ✅ **DEPLOYED AND LIVE**
+- **Production URL**: https://webapp-38q.pages.dev
+- **Database**: Cloudflare D1 (ID: baf42038-5e65-4681-95a0-77822929b987)
 - **Tech Stack**: Hono + TypeScript + Cloudflare D1 + TailwindCSS
 - **Last Updated**: 2025-11-18
+- **Last Deployment**: https://265d4d66.webapp-38q.pages.dev
 
 ## 🎯 Recommended Next Steps
 
