@@ -301,48 +301,91 @@ async function performOCR(base64Image: string, mimeType: string, env: any): Prom
   }
   
   try {
-    // Prepare the request body
-    const formData = new FormData();
-    formData.append('base64Image', `data:${mimeType};base64,${base64Image}`);
-    formData.append('language', 'eng');
-    formData.append('isOverlayRequired', 'false');
-    formData.append('detectOrientation', 'true');
-    formData.append('scale', 'true');
-    formData.append('OCREngine', '2'); // Engine 2 is better for handwriting
+    // Try multiple OCR engines for best results
+    let bestResult = '';
+    let bestConfidence = 0;
     
-    // Call OCR.space API
-    const response = await fetch('https://api.ocr.space/parse/image', {
-      method: 'POST',
-      headers: {
-        'apikey': apiKey,
-      },
-      body: formData
-    });
-    
-    if (!response.ok) {
-      throw new Error(`OCR API request failed: ${response.status} ${response.statusText}`);
+    // Engine 2: Best for handwriting and printed text
+    const result2 = await tryOCREngine(base64Image, mimeType, apiKey, '2');
+    if (result2.confidence > bestConfidence) {
+      bestResult = result2.text;
+      bestConfidence = result2.confidence;
     }
     
-    const data: any = await response.json();
-    
-    // Check for errors
-    if (data.IsErroredOnProcessing) {
-      const errorMessage = data.ErrorMessage?.[0] || 'OCR processing failed';
-      throw new Error(errorMessage);
+    // Engine 1: Alternative engine for comparison
+    try {
+      const result1 = await tryOCREngine(base64Image, mimeType, apiKey, '1');
+      if (result1.confidence > bestConfidence) {
+        bestResult = result1.text;
+        bestConfidence = result1.confidence;
+      }
+    } catch (e) {
+      // Engine 1 failed, continue with Engine 2 result
+      console.log('Engine 1 failed, using Engine 2 result');
     }
     
-    // Extract text from response
-    const extractedText = data.ParsedResults?.[0]?.ParsedText || '';
-    
-    if (!extractedText || extractedText.trim() === '') {
-      return 'No text detected in the image. The image may be too blurry, too small, or contain no readable text.';
+    if (!bestResult || bestResult.trim() === '') {
+      return 'No text detected in the image. Try:\n- Higher resolution scan (300+ DPI)\n- Better lighting\n- Straighten the image\n- Increase contrast';
     }
     
-    return extractedText.trim();
+    return bestResult.trim();
   } catch (error: any) {
     console.error('OCR Error:', error);
     throw new Error(`OCR processing failed: ${error.message}`);
   }
+}
+
+// Helper function to try different OCR engines
+async function tryOCREngine(base64Image: string, mimeType: string, apiKey: string, engine: string): Promise<{text: string, confidence: number}> {
+  const formData = new FormData();
+  formData.append('base64Image', `data:${mimeType};base64,${base64Image}`);
+  formData.append('language', 'eng');
+  formData.append('isOverlayRequired', 'false');
+  formData.append('detectOrientation', 'true');
+  formData.append('scale', 'true');
+  formData.append('OCREngine', engine);
+  
+  // Enhanced parameters for better accuracy
+  formData.append('isTable', 'true'); // Better table detection
+  formData.append('detectCheckbox', 'true'); // Detect checkboxes
+  
+  const response = await fetch('https://api.ocr.space/parse/image', {
+    method: 'POST',
+    headers: {
+      'apikey': apiKey,
+    },
+    body: formData
+  });
+  
+  if (!response.ok) {
+    throw new Error(`OCR API request failed: ${response.status} ${response.statusText}`);
+  }
+  
+  const data: any = await response.json();
+  
+  if (data.IsErroredOnProcessing) {
+    const errorMessage = data.ErrorMessage?.[0] || 'OCR processing failed';
+    throw new Error(errorMessage);
+  }
+  
+  const extractedText = data.ParsedResults?.[0]?.ParsedText || '';
+  
+  // Calculate confidence based on text length and quality
+  let confidence = 0;
+  if (extractedText && extractedText.trim().length > 0) {
+    // Basic confidence calculation
+    confidence = Math.min(extractedText.length / 100, 1.0);
+    
+    // Bonus for having expected keywords
+    const keywords = ['date', 'class', 'teacher', 'subject', 'received', 'submission', 'collection'];
+    const foundKeywords = keywords.filter(k => extractedText.toLowerCase().includes(k)).length;
+    confidence += (foundKeywords / keywords.length) * 0.5;
+  }
+  
+  return {
+    text: extractedText,
+    confidence: confidence
+  };
 }
 
 // Parse printing form data from OCR text
