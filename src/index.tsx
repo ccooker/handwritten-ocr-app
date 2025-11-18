@@ -41,7 +41,7 @@ app.post('/api/upload', async (c) => {
 
       // Convert file to base64 for storage/OCR
       const arrayBuffer = await file.arrayBuffer()
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
+      const base64 = arrayBufferToBase64(arrayBuffer)
 
       // Insert into database
       const insertResult = await DB.prepare(`
@@ -199,6 +199,20 @@ app.delete('/api/images/:id', async (c) => {
     return c.json({ error: error.message }, 500)
   }
 })
+
+// Helper function to convert ArrayBuffer to base64 (handles large files)
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 8192; // Process in chunks to avoid stack overflow
+  
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.slice(i, i + chunkSize);
+    binary += String.fromCharCode.apply(null, Array.from(chunk));
+  }
+  
+  return btoa(binary);
+}
 
 // OCR function - OCR.space API integration
 async function performOCR(base64Image: string, mimeType: string, env: any): Promise<string> {
