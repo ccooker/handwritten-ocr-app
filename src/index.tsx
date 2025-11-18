@@ -4,6 +4,7 @@ import { serveStatic } from 'hono/cloudflare-workers'
 
 type Bindings = {
   DB: D1Database;
+  OCR_API_KEY?: string;
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
@@ -199,28 +200,57 @@ app.delete('/api/images/:id', async (c) => {
   }
 })
 
-// OCR function - placeholder for actual OCR service integration
+// OCR function - OCR.space API integration
 async function performOCR(base64Image: string, mimeType: string, env: any): Promise<string> {
-  // This is a placeholder. In production, you would integrate with:
-  // 1. Google Cloud Vision API
-  // 2. OCR.space API
-  // 3. Azure Computer Vision
-  // 4. AWS Textract
+  const apiKey = env.OCR_API_KEY;
   
-  // For demo purposes, return placeholder text
-  // You'll need to add OCR_API_KEY to your .dev.vars file and wrangler secrets
+  if (!apiKey) {
+    throw new Error('OCR_API_KEY not configured. Please add it to .dev.vars or Cloudflare secrets.');
+  }
   
-  // Example with OCR.space (free tier available):
-  // const apiKey = env.OCR_API_KEY
-  // const response = await fetch('https://api.ocr.space/parse/image', {
-  //   method: 'POST',
-  //   headers: {
-  //     'apikey': apiKey,
-  //   },
-  //   body: formData
-  // })
-  
-  return "Sample extracted text from handwritten form. Replace this with actual OCR integration."
+  try {
+    // Prepare the request body
+    const formData = new FormData();
+    formData.append('base64Image', `data:${mimeType};base64,${base64Image}`);
+    formData.append('language', 'eng');
+    formData.append('isOverlayRequired', 'false');
+    formData.append('detectOrientation', 'true');
+    formData.append('scale', 'true');
+    formData.append('OCREngine', '2'); // Engine 2 is better for handwriting
+    
+    // Call OCR.space API
+    const response = await fetch('https://api.ocr.space/parse/image', {
+      method: 'POST',
+      headers: {
+        'apikey': apiKey,
+      },
+      body: formData
+    });
+    
+    if (!response.ok) {
+      throw new Error(`OCR API request failed: ${response.status} ${response.statusText}`);
+    }
+    
+    const data: any = await response.json();
+    
+    // Check for errors
+    if (data.IsErroredOnProcessing) {
+      const errorMessage = data.ErrorMessage?.[0] || 'OCR processing failed';
+      throw new Error(errorMessage);
+    }
+    
+    // Extract text from response
+    const extractedText = data.ParsedResults?.[0]?.ParsedText || '';
+    
+    if (!extractedText || extractedText.trim() === '') {
+      return 'No text detected in the image. The image may be too blurry, too small, or contain no readable text.';
+    }
+    
+    return extractedText.trim();
+  } catch (error: any) {
+    console.error('OCR Error:', error);
+    throw new Error(`OCR processing failed: ${error.message}`);
+  }
 }
 
 // Main page
