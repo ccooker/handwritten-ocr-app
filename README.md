@@ -6,6 +6,7 @@ A web application for uploading images with handwritten data, extracting text us
 
 - **Production**: https://webapp-38q.pages.dev
 - **Latest Deployment**: https://265d4d66.webapp-38q.pages.dev
+- **GitHub Repository**: https://github.com/ccooker/handwritten-ocr-app
 - **Local Development**: http://localhost:3000
 - **Sandbox Demo**: https://3000-i7nnw5p0uh2hjnfz0320a-ad490db5.sandbox.novita.ai
 - **API Endpoints**:
