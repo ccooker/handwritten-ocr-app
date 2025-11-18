@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test OCR Upload</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow">
+        <h1 class="text-2xl font-bold mb-4">Test OCR Upload</h1>
+        <input type="file" id="fileInput" accept="image/*" class="mb-4 p-2 border rounded">
+        <button onclick="testUpload()" class="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600">
+            Test Upload
+        </button>
+        <div id="result" class="mt-4"></div>
+    </div>
+    
+    <script>
+        async function testUpload() {
+            const fileInput = document.getElementById('fileInput');
+            const resultDiv = document.getElementById('result');
+            
+            if (!fileInput.files.length) {
+                resultDiv.innerHTML = '<p class="text-red-500">Please select a file</p>';
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('files', fileInput.files[0]);
+            
+            resultDiv.innerHTML = '<p class="text-blue-500">Uploading and processing...</p>';
+            
+            try {
+                const response = await fetch('http://localhost:3000/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                resultDiv.innerHTML = '<pre class="bg-gray-100 p-4 rounded overflow-auto">' + 
+                    JSON.stringify(data, null, 2) + '</pre>';
+            } catch (error) {
+                resultDiv.innerHTML = '<p class="text-red-500">Error: ' + error.message + '</p>';
+            }
+        }
+    </script>
+</body>
+</html>
