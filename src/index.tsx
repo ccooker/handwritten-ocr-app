@@ -5,6 +5,8 @@ import { serveStatic } from 'hono/cloudflare-workers'
 type Bindings = {
   DB: D1Database;
   OCR_API_KEY?: string;
+  OPENAI_API_KEY?: string;
+  GEMINI_API_KEY?: string;
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
@@ -51,10 +53,26 @@ app.post('/api/upload', async (c) => {
 
       const imageId = insertResult.meta.last_row_id
 
-      // Call OCR API (placeholder - will be implemented with actual OCR service)
+      // Try AI-powered extraction first (best for handwriting)
       try {
-        // For now, simulate OCR extraction
-        const extractedText = await performOCR(base64, file.type, c.env)
+        let parsedData: any = null;
+        let extractedText = '';
+        let extractionMethod = 'OCR';
+        
+        // Try AI extraction first if API key is available
+        const aiResult = await extractWithAI(base64, file.type, c.env);
+        
+        if (aiResult) {
+          // AI extraction successful - use structured data directly
+          parsedData = aiResult;
+          extractedText = JSON.stringify(aiResult, null, 2);
+          extractionMethod = 'AI Vision';
+        } else {
+          // Fall back to OCR + parsing
+          extractedText = await performOCR(base64, file.type, c.env);
+          parsedData = parsePrintingFormData(extractedText);
+          extractionMethod = 'OCR + Parsing';
+        }
         
         // Store extracted data
         await DB.prepare(`
@@ -62,8 +80,33 @@ app.post('/api/upload', async (c) => {
           VALUES (?, ?, ?, ?)
         `).bind(imageId, extractedText, 0.95, 'en').run()
 
-        // Parse and store structured form data
-        const parsedData = parsePrintingFormData(extractedText);
+        // Ensure all required fields have default values
+        parsedData = {
+          RECEIVED_DATE: parsedData.RECEIVED_DATE || '',
+          Class: parsedData.Class || '',
+          Subject: parsedData.Subject || '',
+          Teacher_in_charge: parsedData.Teacher_in_charge || '',
+          Date_of_submission: parsedData.Date_of_submission || '',
+          Date_of_collection: parsedData.Date_of_collection || '',
+          Received_by: parsedData.Received_by || '',
+          No_of_pages_original_copy: parsedData.No_of_pages_original_copy || null,
+          No_of_copies: parsedData.No_of_copies || null,
+          Total_No_of_printed_pages: parsedData.Total_No_of_printed_pages || null,
+          Other_request_Single_sided: parsedData.Other_request_Single_sided ? 1 : 0,
+          Other_request_Double_sided: parsedData.Other_request_Double_sided ? 1 : 0,
+          Other_request_Stapling: parsedData.Other_request_Stapling ? 1 : 0,
+          Other_request_No_stapling_required: parsedData.Other_request_No_stapling_required ? 1 : 0,
+          Other_request_White_paper: parsedData.Other_request_White_paper ? 1 : 0,
+          Other_request_Newsprint_paper: parsedData.Other_request_Newsprint_paper ? 1 : 0,
+          Remarks: parsedData.Remarks || '',
+          Signed_by: parsedData.Signed_by || '',
+          For_office_use_RICOH: parsedData.For_office_use_RICOH || '',
+          For_office_use_Toshiba: parsedData.For_office_use_Toshiba || '',
+          Table_Form: parsedData.Table_Form || '',
+          Table_Class: parsedData.Table_Class || '',
+          Table_No_of_copies: parsedData.Table_No_of_copies || '',
+          Table_Teacher_in_Charge: parsedData.Table_Teacher_in_Charge || ''
+        };
         await DB.prepare(`
           INSERT INTO printing_forms (
             image_id, RECEIVED_DATE, Class, Subject, Teacher_in_charge,
@@ -100,7 +143,8 @@ app.post('/api/upload', async (c) => {
           status: 'success',
           imageId: imageId,
           extractedText: extractedText,
-          parsedData: parsedData
+          parsedData: parsedData,
+          extractionMethod: extractionMethod
         })
       } catch (ocrError: any) {
         // Update status to failed
@@ -386,6 +430,163 @@ async function tryOCREngine(base64Image: string, mimeType: string, apiKey: strin
     text: extractedText,
     confidence: confidence
   };
+}
+
+// AI-powered handwriting extraction using GPT-4 Vision or Gemini
+async function extractWithAI(base64Image: string, mimeType: string, env: any): Promise<any> {
+  // Try OpenAI GPT-4 Vision first
+  if (env.OPENAI_API_KEY) {
+    try {
+      return await extractWithOpenAI(base64Image, mimeType, env.OPENAI_API_KEY);
+    } catch (error) {
+      console.error('OpenAI extraction failed:', error);
+    }
+  }
+  
+  // Try Google Gemini as fallback
+  if (env.GEMINI_API_KEY) {
+    try {
+      return await extractWithGemini(base64Image, mimeType, env.GEMINI_API_KEY);
+    } catch (error) {
+      console.error('Gemini extraction failed:', error);
+    }
+  }
+  
+  // If no AI API available, return null to use OCR fallback
+  return null;
+}
+
+// Extract data using OpenAI GPT-4 Vision
+async function extractWithOpenAI(base64Image: string, mimeType: string, apiKey: string): Promise<any> {
+  const prompt = `You are an expert in data extraction from handwritten documents, with a meticulous eye for detail and accuracy. Your task is to extract specific data points from the provided handwritten printing request form image.
+
+Extract the following fields:
+1. RECEIVED_DATE - Date when form was received
+2. Class - Student class/grade
+3. Subject - Subject or topic
+4. Teacher_in_charge - Teacher's name
+5. Date_of_submission - When submitted
+6. Date_of_collection - When to collect
+7. Received_by - Person who received
+8. No_of_pages_original_copy - Number of pages in original (numeric)
+9. No_of_copies - Number of copies needed (numeric)
+10. Total_No_of_printed_pages - Total pages to print (numeric)
+11. Other_request_Single_sided - Is "Single sided" checked? (true/false)
+12. Other_request_Double_sided - Is "Double sided" checked? (true/false)
+13. Other_request_Stapling - Is "Stapling" checked? (true/false)
+14. Other_request_No_stapling_required - Is "No stapling" checked? (true/false)
+15. Other_request_White_paper - Is "White paper" checked? (true/false)
+16. Other_request_Newsprint_paper - Is "Newsprint" checked? (true/false)
+17. Remarks - Any remarks or notes
+18. Signed_by - Signature/name
+19. For_office_use_RICOH - RICOH field value
+20. For_office_use_Toshiba - Toshiba field value
+
+Return ONLY a valid JSON object with these exact field names. If a field is not visible or empty, use empty string "" for text fields, null for numbers, and false for booleans.
+
+Example format:
+{
+  "RECEIVED_DATE": "2025-11-15",
+  "Class": "5A",
+  "Subject": "Mathematics",
+  "Teacher_in_charge": "Mr. Smith",
+  "No_of_pages_original_copy": 10,
+  "No_of_copies": 30,
+  ...
+}`;
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o', // or gpt-4-vision-preview
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: prompt
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:${mimeType};base64,${base64Image}`
+              }
+            }
+          ]
+        }
+      ],
+      max_tokens: 1000,
+      temperature: 0.1 // Low temperature for accurate extraction
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`OpenAI API failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const content = data.choices[0]?.message?.content || '';
+  
+  // Parse JSON from response
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    return JSON.parse(jsonMatch[0]);
+  }
+  
+  throw new Error('No valid JSON found in AI response');
+}
+
+// Extract data using Google Gemini
+async function extractWithGemini(base64Image: string, mimeType: string, apiKey: string): Promise<any> {
+  const prompt = `You are an expert in data extraction from handwritten documents. Extract all data from this printing request form and return it as JSON.
+
+Extract these fields: RECEIVED_DATE, Class, Subject, Teacher_in_charge, Date_of_submission, Date_of_collection, Received_by, No_of_pages_original_copy, No_of_copies, Total_No_of_printed_pages, Other_request_Single_sided, Other_request_Double_sided, Other_request_Stapling, Other_request_No_stapling_required, Other_request_White_paper, Other_request_Newsprint_paper, Remarks, Signed_by, For_office_use_RICOH, For_office_use_Toshiba.
+
+Return ONLY valid JSON with exact field names. Use empty string for missing text, null for missing numbers, false for unchecked boxes.`;
+
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=${apiKey}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      contents: [{
+        parts: [
+          { text: prompt },
+          {
+            inline_data: {
+              mime_type: mimeType,
+              data: base64Image
+            }
+          }
+        ]
+      }],
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 1000
+      }
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Gemini API failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const content = data.candidates[0]?.content?.parts[0]?.text || '';
+  
+  // Parse JSON from response
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    return JSON.parse(jsonMatch[0]);
+  }
+  
+  throw new Error('No valid JSON found in AI response');
 }
 
 // Parse printing form data from OCR text

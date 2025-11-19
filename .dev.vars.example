@@ -1,6 +1,16 @@
 # Local development environment variables
 # Copy this file to .dev.vars and add your actual API keys
 
-# OCR.space API Key
+# OCR.space API Key (Required - free tier available)
 # Get your free API key from: https://ocr.space/ocrapi
 OCR_API_KEY=your_ocr_space_api_key_here
+
+# OpenAI API Key (Optional but HIGHLY RECOMMENDED for handwriting)
+# Get from: https://platform.openai.com/api-keys
+# Cost: ~$0.01 per image, 90-98% accuracy for handwriting
+OPENAI_API_KEY=sk-your-openai-key-here
+
+# Google Gemini API Key (Optional alternative to OpenAI)
+# Get from: https://makersuite.google.com/app/apikey
+# Free tier available, 85-95% accuracy
+GEMINI_API_KEY=your-gemini-key-here
