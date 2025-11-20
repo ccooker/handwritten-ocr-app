@@ -100,26 +100,10 @@ app.post('/api/upload', async (c) => {
           Toshiba: cleanText(parsedData.Toshiba)
         };
         
-        // Insert into simplified printing_forms table (only 8 fields)
-        await DB.prepare(`
-          INSERT INTO printing_forms (
-            image_id, Class, Subject, Teacher_in_charge,
-            No_of_pages_original_copy, No_of_copies, Total_No_of_printed_pages,
-            Ricoh, Toshiba
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(
-          imageId, 
-          parsedData.Class, 
-          parsedData.Subject,
-          parsedData.Teacher_in_charge, 
-          parsedData.No_of_pages_original_copy, 
-          parsedData.No_of_copies,
-          parsedData.Total_No_of_printed_pages, 
-          parsedData.Ricoh,
-          parsedData.Toshiba
-        ).run()
+        // DO NOT save to printing_forms table yet - wait for user verification
+        // Data will be saved via /api/save-verified endpoint after user confirms
 
-        // Update status to completed
+        // Update status to completed (extraction done, awaiting verification)
         await DB.prepare(`
           UPDATE uploaded_images SET processing_status = ? WHERE id = ?
         `).bind('completed', imageId).run()
@@ -237,6 +221,57 @@ app.get('/api/search', async (c) => {
     `).bind(`%${query}%`).all()
 
     return c.json({ success: true, results: result.results })
+  } catch (error: any) {
+    return c.json({ error: error.message }, 500)
+  }
+})
+
+// API route: Save verified data to table
+app.post('/api/save-verified', async (c) => {
+  try {
+    const { DB } = c.env
+    const { records } = await c.req.json()
+    
+    if (!records || !Array.isArray(records)) {
+      return c.json({ error: 'Invalid records format' }, 400)
+    }
+    
+    let saved = 0
+    
+    for (const record of records) {
+      const { imageId, data } = record
+      
+      // Clean text fields
+      const cleanText = (value: any): string => {
+        if (typeof value === 'string') {
+          return value.replace(/#/g, '').trim()
+        }
+        return value || ''
+      }
+      
+      // Insert verified data into printing_forms table
+      await DB.prepare(`
+        INSERT INTO printing_forms (
+          image_id, Class, Subject, Teacher_in_charge,
+          No_of_pages_original_copy, No_of_copies, Total_No_of_printed_pages,
+          Ricoh, Toshiba
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        imageId,
+        cleanText(data.Class),
+        cleanText(data.Subject),
+        cleanText(data.Teacher_in_charge),
+        data.No_of_pages_original_copy || null,
+        data.No_of_copies || null,
+        data.Total_No_of_printed_pages || null,
+        cleanText(data.Ricoh),
+        cleanText(data.Toshiba)
+      ).run()
+      
+      saved++
+    }
+    
+    return c.json({ success: true, saved })
   } catch (error: any) {
     return c.json({ error: error.message }, 500)
   }
@@ -792,21 +827,6 @@ app.get('/', (c) => {
                         <div id="progressBar" class="bg-blue-600 h-4 rounded-full transition-all duration-300" style="width: 0%"></div>
                     </div>
                     <p id="progressText" class="text-sm text-gray-600 mt-2">Processing...</p>
-                </div>
-            </div>
-            
-            <!-- Search Section -->
-            <div class="bg-white rounded-lg shadow-md p-6 mb-8">
-                <h2 class="text-2xl font-semibold text-gray-800 mb-4">
-                    <i class="fas fa-search mr-2 text-purple-600"></i>
-                    Search Extracted Data
-                </h2>
-                <div class="flex gap-2">
-                    <input type="text" id="searchInput" placeholder="Search in extracted text..." class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <button id="searchBtn" class="bg-purple-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-purple-700 transition-colors">
-                        <i class="fas fa-search mr-2"></i>
-                        Search
-                    </button>
                 </div>
             </div>
             

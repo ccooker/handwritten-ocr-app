@@ -1,5 +1,6 @@
 // Global state
 let selectedFiles = [];
+let pendingVerifications = []; // Store extracted data pending verification
 
 // DOM elements
 const dropZone = document.getElementById('dropZone');
@@ -9,8 +10,6 @@ const uploadBtn = document.getElementById('uploadBtn');
 const uploadProgress = document.getElementById('uploadProgress');
 const progressBar = document.getElementById('progressBar');
 const progressText = document.getElementById('progressText');
-const searchInput = document.getElementById('searchInput');
-const searchBtn = document.getElementById('searchBtn');
 const refreshBtn = document.getElementById('refreshBtn');
 const resultsContainer = document.getElementById('resultsContainer');
 
@@ -83,14 +82,14 @@ function formatFileSize(bytes) {
     return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
 }
 
-// Upload files
+// Upload files - now extracts but doesn't save
 uploadBtn.addEventListener('click', async () => {
     if (selectedFiles.length === 0) return;
     
     uploadBtn.disabled = true;
     uploadProgress.classList.remove('hidden');
     progressBar.style.width = '0%';
-    progressText.textContent = 'Uploading files...';
+    progressText.textContent = 'Uploading and extracting data...';
     
     const formData = new FormData();
     selectedFiles.forEach(file => {
@@ -107,21 +106,26 @@ uploadBtn.addEventListener('click', async () => {
         });
         
         progressBar.style.width = '100%';
-        progressText.textContent = `Successfully processed ${response.data.processed} file(s)`;
+        progressText.textContent = `Extraction complete! Please verify data below.`;
+        
+        // Store results for verification
+        pendingVerifications = response.data.results.filter(r => r.status === 'success');
         
         // Show results summary
-        const successCount = response.data.results.filter(r => r.status === 'success').length;
+        const successCount = pendingVerifications.length;
         const failCount = response.data.results.filter(r => r.status === 'failed').length;
         
-        alert(`Processing complete!\n✓ Success: ${successCount}\n✗ Failed: ${failCount}`);
+        if (failCount > 0) {
+            alert(`Extraction complete!\n✓ Success: ${successCount}\n✗ Failed: ${failCount}\n\nPlease verify the extracted data and click "Save to Table" to save.`);
+        }
         
         // Reset form
         selectedFiles = [];
         fileInput.value = '';
         updateFileList();
         
-        // Refresh results
-        loadImages();
+        // Display verification results
+        displayVerificationResults();
         
         setTimeout(() => {
             uploadProgress.classList.add('hidden');
@@ -142,143 +146,187 @@ uploadBtn.addEventListener('click', async () => {
     }
 });
 
-// Load images
-async function loadImages() {
-    try {
-        const response = await axios.get('/api/images');
-        displayResults(response.data.images);
-    } catch (error) {
-        console.error('Error loading images:', error);
+// Display verification results
+function displayVerificationResults() {
+    if (pendingVerifications.length === 0) {
         resultsContainer.innerHTML = `
-            <p class="text-red-500 text-center py-8">
-                <i class="fas fa-exclamation-circle mr-2"></i>
-                Error loading data: ${error.message}
-            </p>
-        `;
-    }
-}
-
-// Display results
-function displayResults(images) {
-    if (!images || images.length === 0) {
-        resultsContainer.innerHTML = `
-            <p class="text-gray-500 text-center py-8">No data yet. Upload some images to get started!</p>
+            <p class="text-gray-500 text-center py-8">No data pending verification. Upload some images to get started!</p>
         `;
         return;
     }
     
-    resultsContainer.innerHTML = images.map(img => {
-        const statusColor = {
-            'completed': 'text-green-600 bg-green-100',
-            'pending': 'text-yellow-600 bg-yellow-100',
-            'processing': 'text-blue-600 bg-blue-100',
-            'failed': 'text-red-600 bg-red-100'
-        }[img.processing_status] || 'text-gray-600 bg-gray-100';
-        
-        return `
-            <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                <div class="flex justify-between items-start mb-3">
-                    <div>
-                        <h3 class="font-semibold text-gray-800 text-lg">${img.filename}</h3>
-                        <p class="text-sm text-gray-500">
-                            <i class="fas fa-calendar mr-1"></i>
-                            ${new Date(img.upload_date).toLocaleString()}
-                        </p>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <span class="px-3 py-1 rounded-full text-xs font-semibold ${statusColor}">
-                            ${img.processing_status.toUpperCase()}
-                        </span>
-                        <button onclick="deleteImage(${img.id})" class="text-red-500 hover:text-red-700">
+    resultsContainer.innerHTML = `
+        <div class="bg-yellow-50 border-2 border-yellow-400 rounded-lg p-4 mb-6">
+            <div class="flex items-start gap-3">
+                <i class="fas fa-exclamation-triangle text-yellow-600 text-2xl mt-1"></i>
+                <div class="flex-1">
+                    <h3 class="font-bold text-yellow-800 text-lg mb-2">Please Verify Extracted Data</h3>
+                    <p class="text-yellow-700 mb-4">Review the extracted information below and make any corrections if needed. Click "Save to Table" when you're ready to save all verified data.</p>
+                    <div class="flex gap-3">
+                        <button onclick="saveAllToTable()" class="bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center gap-2">
+                            <i class="fas fa-save"></i>
+                            Save All to Table (${pendingVerifications.length} records)
+                        </button>
+                        <button onclick="discardAll()" class="bg-red-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-red-700 transition-colors flex items-center gap-2">
                             <i class="fas fa-trash"></i>
+                            Discard All
                         </button>
                     </div>
                 </div>
-                
-                ${img.extracted_text ? `
-                    <div class="bg-gray-50 rounded-lg p-4 mb-2">
-                        <h4 class="font-semibold text-gray-700 mb-2">
-                            <i class="fas fa-file-alt mr-2 text-blue-500"></i>
-                            Extracted Text:
-                        </h4>
-                        <p class="text-gray-800 whitespace-pre-wrap">${img.extracted_text}</p>
-                        ${img.confidence ? `
-                            <div class="mt-2 flex items-center gap-2">
-                                <span class="text-sm text-gray-600">Confidence:</span>
-                                <div class="flex-1 bg-gray-200 rounded-full h-2 max-w-xs">
-                                    <div class="bg-green-500 h-2 rounded-full" style="width: ${img.confidence * 100}%"></div>
-                                </div>
-                                <span class="text-sm font-semibold text-gray-700">${(img.confidence * 100).toFixed(1)}%</span>
-                            </div>
-                        ` : ''}
+            </div>
+        </div>
+        
+        ${pendingVerifications.map((result, index) => {
+            const data = result.parsedData || {};
+            return `
+                <div class="border-2 border-blue-300 bg-blue-50 rounded-lg p-6 mb-4">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 class="font-bold text-gray-800 text-lg flex items-center gap-2">
+                                <i class="fas fa-file-image text-blue-600"></i>
+                                ${result.filename}
+                            </h3>
+                            <span class="inline-block px-3 py-1 bg-blue-600 text-white text-xs font-semibold rounded-full mt-2">
+                                ${result.extractionMethod || 'Extracted'}
+                            </span>
+                        </div>
+                        <button onclick="removeVerification(${index})" class="text-red-600 hover:text-red-800 font-semibold">
+                            <i class="fas fa-times"></i> Remove
+                        </button>
                     </div>
-                ` : img.processing_status === 'failed' ? `
-                    <div class="bg-red-50 border border-red-200 rounded-lg p-3">
-                        <p class="text-red-700">
-                            <i class="fas fa-exclamation-triangle mr-2"></i>
-                            Error: ${img.error_message || 'Processing failed'}
-                        </p>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white rounded-lg p-4">
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-1">Class</label>
+                            <input type="text" id="class_${index}" value="${data.Class || ''}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-1">Subject</label>
+                            <input type="text" id="subject_${index}" value="${data.Subject || ''}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block text-sm font-semibold text-gray-700 mb-1">Teacher-in-charge</label>
+                            <input type="text" id="teacher_${index}" value="${data.Teacher_in_charge || ''}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-1">No. of Pages (Original)</label>
+                            <input type="number" id="pages_${index}" value="${data.No_of_pages_original_copy || ''}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-1">No. of Copies</label>
+                            <input type="number" id="copies_${index}" value="${data.No_of_copies || ''}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-1">Total Printed Pages</label>
+                            <input type="number" id="total_${index}" value="${data.Total_No_of_printed_pages || ''}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-1">Ricoh (if circled)</label>
+                            <input type="text" id="ricoh_${index}" value="${data.Ricoh || ''}" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-yellow-50 focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-1">Toshiba (if circled)</label>
+                            <input type="text" id="toshiba_${index}" value="${data.Toshiba || ''}" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-blue-50 focus:ring-2 focus:ring-blue-500">
+                        </div>
                     </div>
-                ` : ''}
-                
-                <div class="text-xs text-gray-500 mt-2">
-                    <span><i class="fas fa-file mr-1"></i> ${formatFileSize(img.file_size)}</span>
-                    <span class="ml-3"><i class="fas fa-image mr-1"></i> ${img.mime_type}</span>
-                    ${img.language ? `<span class="ml-3"><i class="fas fa-language mr-1"></i> ${img.language.toUpperCase()}</span>` : ''}
                 </div>
+            `;
+        }).join('')}
+    `;
+}
+
+// Remove single verification
+function removeVerification(index) {
+    if (confirm('Remove this record from verification?')) {
+        pendingVerifications.splice(index, 1);
+        displayVerificationResults();
+    }
+}
+
+// Discard all verifications
+function discardAll() {
+    if (confirm('Discard all extracted data without saving?')) {
+        pendingVerifications = [];
+        resultsContainer.innerHTML = `
+            <p class="text-gray-500 text-center py-8">All data discarded. Upload some images to get started!</p>
+        `;
+    }
+}
+
+// Save all verified data to table
+async function saveAllToTable() {
+    if (pendingVerifications.length === 0) {
+        alert('No data to save!');
+        return;
+    }
+    
+    if (!confirm(`Save ${pendingVerifications.length} verified record(s) to the table?`)) {
+        return;
+    }
+    
+    // Collect verified data from inputs
+    const verifiedData = pendingVerifications.map((result, index) => ({
+        imageId: result.imageId,
+        filename: result.filename,
+        data: {
+            Class: document.getElementById(`class_${index}`).value,
+            Subject: document.getElementById(`subject_${index}`).value,
+            Teacher_in_charge: document.getElementById(`teacher_${index}`).value,
+            No_of_pages_original_copy: parseInt(document.getElementById(`pages_${index}`).value) || null,
+            No_of_copies: parseInt(document.getElementById(`copies_${index}`).value) || null,
+            Total_No_of_printed_pages: parseInt(document.getElementById(`total_${index}`).value) || null,
+            Ricoh: document.getElementById(`ricoh_${index}`).value,
+            Toshiba: document.getElementById(`toshiba_${index}`).value
+        }
+    }));
+    
+    try {
+        // Show saving progress
+        resultsContainer.innerHTML = `
+            <div class="text-center py-12">
+                <i class="fas fa-spinner fa-spin text-6xl text-blue-600 mb-4"></i>
+                <p class="text-xl text-gray-700 font-semibold">Saving ${verifiedData.length} record(s) to table...</p>
             </div>
         `;
-    }).join('');
-}
-
-// Delete image
-async function deleteImage(id) {
-    if (!confirm('Are you sure you want to delete this image and its data?')) {
-        return;
-    }
-    
-    try {
-        await axios.delete(`/api/images/${id}`);
-        loadImages();
-    } catch (error) {
-        console.error('Error deleting image:', error);
-        alert('Failed to delete image: ' + error.message);
-    }
-}
-
-// Search functionality
-searchBtn.addEventListener('click', performSearch);
-searchInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') performSearch();
-});
-
-async function performSearch() {
-    const query = searchInput.value.trim();
-    
-    if (!query) {
-        loadImages();
-        return;
-    }
-    
-    try {
-        const response = await axios.get(`/api/search?q=${encodeURIComponent(query)}`);
-        displayResults(response.data.results);
-    } catch (error) {
-        console.error('Search error:', error);
+        
+        // Save to database via API
+        const response = await axios.post('/api/save-verified', { records: verifiedData });
+        
+        // Success!
+        alert(`✓ Successfully saved ${response.data.saved} record(s) to the table!`);
+        
+        // Clear pending verifications
+        pendingVerifications = [];
+        
+        // Show success message
         resultsContainer.innerHTML = `
-            <p class="text-red-500 text-center py-8">
-                <i class="fas fa-exclamation-circle mr-2"></i>
-                Search failed: ${error.message}
-            </p>
+            <div class="bg-green-50 border-2 border-green-500 rounded-lg p-8 text-center">
+                <i class="fas fa-check-circle text-6xl text-green-600 mb-4"></i>
+                <h3 class="text-2xl font-bold text-green-800 mb-2">Data Saved Successfully!</h3>
+                <p class="text-green-700 mb-6">${response.data.saved} record(s) have been saved to the table.</p>
+                <a href="/table" class="inline-block bg-indigo-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors">
+                    <i class="fas fa-table mr-2"></i>
+                    View Table
+                </a>
+            </div>
         `;
+        
+    } catch (error) {
+        console.error('Save error:', error);
+        alert('Failed to save data: ' + (error.response?.data?.error || error.message));
+        displayVerificationResults(); // Show form again
     }
 }
 
-// Refresh button
+// Refresh button - no more loading images, just reset
 refreshBtn.addEventListener('click', () => {
-    searchInput.value = '';
-    loadImages();
+    pendingVerifications = [];
+    resultsContainer.innerHTML = `
+        <p class="text-gray-500 text-center py-8">Upload some images to get started!</p>
+    `;
 });
 
-// Initialize - load existing data
-loadImages();
+// Initialize
+resultsContainer.innerHTML = `
+    <p class="text-gray-500 text-center py-8">No data yet. Upload some images to get started!</p>
+`;
