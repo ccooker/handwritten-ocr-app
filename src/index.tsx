@@ -74,63 +74,49 @@ app.post('/api/upload', async (c) => {
           extractionMethod = 'OCR + Parsing';
         }
         
+        // Clean all # symbols from text fields
+        const cleanText = (value: any): string => {
+          if (typeof value === 'string') {
+            return value.replace(/#/g, '').trim();
+          }
+          return value || '';
+        };
+        
         // Store extracted data
         await DB.prepare(`
           INSERT INTO extracted_data (image_id, extracted_text, confidence, language)
           VALUES (?, ?, ?, ?)
         `).bind(imageId, extractedText, 0.95, 'en').run()
 
-        // Ensure all required fields have default values
+        // Ensure only the 8 required fields with cleaned data
         parsedData = {
-          RECEIVED_DATE: parsedData.RECEIVED_DATE || '',
-          Class: parsedData.Class || '',
-          Subject: parsedData.Subject || '',
-          Teacher_in_charge: parsedData.Teacher_in_charge || '',
-          Date_of_submission: parsedData.Date_of_submission || '',
-          Date_of_collection: parsedData.Date_of_collection || '',
-          Received_by: parsedData.Received_by || '',
+          Class: cleanText(parsedData.Class),
+          Subject: cleanText(parsedData.Subject),
+          Teacher_in_charge: cleanText(parsedData.Teacher_in_charge),
           No_of_pages_original_copy: parsedData.No_of_pages_original_copy || null,
           No_of_copies: parsedData.No_of_copies || null,
           Total_No_of_printed_pages: parsedData.Total_No_of_printed_pages || null,
-          Other_request_Single_sided: parsedData.Other_request_Single_sided ? 1 : 0,
-          Other_request_Double_sided: parsedData.Other_request_Double_sided ? 1 : 0,
-          Other_request_Stapling: parsedData.Other_request_Stapling ? 1 : 0,
-          Other_request_No_stapling_required: parsedData.Other_request_No_stapling_required ? 1 : 0,
-          Other_request_White_paper: parsedData.Other_request_White_paper ? 1 : 0,
-          Other_request_Newsprint_paper: parsedData.Other_request_Newsprint_paper ? 1 : 0,
-          Remarks: parsedData.Remarks || '',
-          Signed_by: parsedData.Signed_by || '',
-          For_office_use_RICOH: parsedData.For_office_use_RICOH || '',
-          For_office_use_Toshiba: parsedData.For_office_use_Toshiba || '',
-          Table_Form: parsedData.Table_Form || '',
-          Table_Class: parsedData.Table_Class || '',
-          Table_No_of_copies: parsedData.Table_No_of_copies || '',
-          Table_Teacher_in_Charge: parsedData.Table_Teacher_in_Charge || ''
+          Ricoh: cleanText(parsedData.Ricoh),
+          Toshiba: cleanText(parsedData.Toshiba)
         };
+        
+        // Insert into simplified printing_forms table (only 8 fields)
         await DB.prepare(`
           INSERT INTO printing_forms (
-            image_id, RECEIVED_DATE, Class, Subject, Teacher_in_charge,
-            Date_of_submission, Date_of_collection, Received_by,
+            image_id, Class, Subject, Teacher_in_charge,
             No_of_pages_original_copy, No_of_copies, Total_No_of_printed_pages,
-            Other_request_Single_sided, Other_request_Double_sided,
-            Other_request_Stapling, Other_request_No_stapling_required,
-            Other_request_White_paper, Other_request_Newsprint_paper,
-            Remarks, Signed_by, For_office_use_RICOH, For_office_use_Toshiba,
-            Table_Form, Table_Class, Table_No_of_copies, Table_Teacher_in_Charge
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            Ricoh, Toshiba
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
-          imageId, parsedData.RECEIVED_DATE, parsedData.Class, parsedData.Subject,
-          parsedData.Teacher_in_charge, parsedData.Date_of_submission,
-          parsedData.Date_of_collection, parsedData.Received_by,
-          parsedData.No_of_pages_original_copy, parsedData.No_of_copies,
-          parsedData.Total_No_of_printed_pages, parsedData.Other_request_Single_sided,
-          parsedData.Other_request_Double_sided, parsedData.Other_request_Stapling,
-          parsedData.Other_request_No_stapling_required, parsedData.Other_request_White_paper,
-          parsedData.Other_request_Newsprint_paper, parsedData.Remarks,
-          parsedData.Signed_by, parsedData.For_office_use_RICOH,
-          parsedData.For_office_use_Toshiba, parsedData.Table_Form,
-          parsedData.Table_Class, parsedData.Table_No_of_copies,
-          parsedData.Table_Teacher_in_Charge
+          imageId, 
+          parsedData.Class, 
+          parsedData.Subject,
+          parsedData.Teacher_in_charge, 
+          parsedData.No_of_pages_original_copy, 
+          parsedData.No_of_copies,
+          parsedData.Total_No_of_printed_pages, 
+          parsedData.Ricoh,
+          parsedData.Toshiba
         ).run()
 
         // Update status to completed
@@ -545,46 +531,47 @@ Example format:
 async function extractWithGemini(base64Image: string, mimeType: string, apiKey: string): Promise<any> {
   const prompt = `You are an expert in data extraction from handwritten documents, with a meticulous eye for detail and accuracy. Your task is to extract specific data points from the provided handwritten printing request form image.
 
-Extract the following fields with precision:
-1. RECEIVED_DATE - Date when form was received
-2. Class - Student class/grade
-3. Subject - Subject or topic
-4. Teacher_in_charge - Teacher's name
-5. Date_of_submission - When submitted
-6. Date_of_collection - When to collect
-7. Received_by - Name of receiver
-8. No_of_pages_original_copy - Number of original pages
-9. No_of_copies - Number of copies requested
-10. Total_No_of_printed_pages - Total pages to print
-11. Other_request_Single_sided - Boolean (true if checkbox marked)
-12. Other_request_Double_sided - Boolean (true if checkbox marked)
-13. Other_request_Stapling - Boolean (true if checkbox marked)
-14. Other_request_No_stapling_required - Boolean (true if checkbox marked)
-15. Other_request_White_paper - Boolean (true if checkbox marked)
-16. Other_request_Newsprint_paper - Boolean (true if checkbox marked)
-17. Remarks - Any additional remarks
-18. Signed_by - Signature name
-19. For_office_use_RICOH - Office use field for RICOH
-20. For_office_use_Toshiba - Office use field for Toshiba
-21. Table_Form - Table field: Form
-22. Table_Class - Table field: Class
-23. Table_No_of_copies - Table field: Number of copies
-24. Table_Teacher_in_Charge - Table field: Teacher name
+Extract ONLY the following 8 fields:
+1. Class - Student class/grade (e.g., "5A", "Primary 3")
+2. Subject - Subject or topic
+3. Teacher_in_charge - Teacher's name
+4. No_of_pages_original_copy - Number of original pages (numeric value only)
+5. No_of_copies - Number of copies requested (numeric value only)
+6. Total_No_of_printed_pages - Total pages to print (numeric value only)
+7. Ricoh - IMPORTANT: If "Ricoh" is circled/selected, put the value from Total_No_of_printed_pages here. Otherwise empty string.
+8. Toshiba - IMPORTANT: If "Toshiba" is circled/selected, put the value from Total_No_of_printed_pages here. Otherwise empty string.
 
-IMPORTANT INSTRUCTIONS:
+CRITICAL INSTRUCTIONS:
+- Remove ALL "#" symbols from extracted text (e.g., "Class #5A" becomes "Class 5A")
+- For Ricoh field: Check if "Ricoh" is circled/checked/selected. If YES, copy the Total_No_of_printed_pages value here. If NO, use empty string "".
+- For Toshiba field: Check if "Toshiba" is circled/checked/selected. If YES, copy the Total_No_of_printed_pages value here. If NO, use empty string "".
 - For missing or illegible text fields, use empty string ""
 - For missing numbers, use null
-- For unchecked checkboxes, use false
-- For checked checkboxes, use true
-- Return ONLY a valid JSON object with these exact field names
+- Return ONLY a valid JSON object with these exact 8 field names
 - Do not include any explanatory text, only the JSON object
 
-Example format:
+Example format (when Ricoh is circled):
 {
-  "RECEIVED_DATE": "2024-01-15",
-  "Class": "10A",
+  "Class": "5A",
   "Subject": "Mathematics",
-  ...
+  "Teacher_in_charge": "John Doe",
+  "No_of_pages_original_copy": 5,
+  "No_of_copies": 30,
+  "Total_No_of_printed_pages": 150,
+  "Ricoh": "150",
+  "Toshiba": ""
+}
+
+Example format (when Toshiba is circled):
+{
+  "Class": "Primary 3",
+  "Subject": "Science",
+  "Teacher_in_charge": "Jane Smith",
+  "No_of_pages_original_copy": 3,
+  "No_of_copies": 25,
+  "Total_No_of_printed_pages": 75,
+  "Ricoh": "",
+  "Toshiba": "75"
 }`;
 
   // Try latest experimental model first (gemini-2.0-flash-exp)
@@ -671,41 +658,46 @@ Example format:
   throw lastError || new Error('All Gemini models failed');
 }
 
-// Parse printing form data from OCR text
+// Parse printing form data from OCR text - Extract only 8 essential fields
 function parsePrintingFormData(ocrText: string): any {
   const data: any = {};
   
-  // Helper function to extract value after a label
+  // Helper function to extract value after a label and remove # symbols
   const extractValue = (text: string, labels: string[]): string => {
     for (const label of labels) {
       const regex = new RegExp(label + '\\s*:?\\s*([^\\n\\r]+)', 'i');
       const match = text.match(regex);
       if (match && match[1]) {
-        return match[1].trim();
+        return match[1].trim().replace(/#/g, '').trim();
       }
     }
     return '';
   };
   
-  // Helper function to check if text contains checkbox markers
-  const hasCheckbox = (text: string, labels: string[]): boolean => {
+  // Helper function to check if text contains circled/checked marker near a label
+  const isCircled = (text: string, labels: string[]): boolean => {
     for (const label of labels) {
-      const regex = new RegExp(`[\\[\\(]?[xX✓√]?[\\]\\)]?\\s*${label}`, 'i');
-      if (regex.test(text)) {
-        return true;
+      // Look for various circle/check patterns near the label
+      const patterns = [
+        `\\([xX✓√]\\)\\s*${label}`,  // (X) Ricoh
+        `${label}\\s*\\([xX✓√]\\)`,  // Ricoh (X)
+        `\\[${label}\\]`,            // [Ricoh]
+        `<${label}>`,                // <Ricoh>
+        `${label}\\s*[*✓√✔✗xX]`,    // Ricoh X
+      ];
+      for (const pattern of patterns) {
+        if (new RegExp(pattern, 'i').test(text)) {
+          return true;
+        }
       }
     }
     return false;
   };
   
-  // Extract main fields
-  data.RECEIVED_DATE = extractValue(ocrText, ['RECEIVED DATE', 'Received Date', 'Date Received', 'REC DATE']);
-  data.Class = extractValue(ocrText, ['Class', 'CLASS']);
+  // Extract only the 8 required fields
+  data.Class = extractValue(ocrText, ['Class', 'CLASS', 'Grade']);
   data.Subject = extractValue(ocrText, ['Subject', 'SUBJECT']);
   data.Teacher_in_charge = extractValue(ocrText, ['Teacher in charge', 'Teacher-in-charge', 'Teacher', 'Teacher in Charge', 'TEACHER IN CHARGE']);
-  data.Date_of_submission = extractValue(ocrText, ['Date of submission', 'Submission Date', 'Date of Submission', 'DATE OF SUBMISSION']);
-  data.Date_of_collection = extractValue(ocrText, ['Date of collection', 'Collection Date', 'Date of Collection', 'DATE OF COLLECTION']);
-  data.Received_by = extractValue(ocrText, ['Received by', 'Received By', 'RECEIVED BY']);
   
   // Extract numeric fields
   const pagesOriginal = extractValue(ocrText, ['No. of pages \\(original copy\\)', 'No of pages', 'Pages original', 'NO. OF PAGES']);
@@ -714,30 +706,20 @@ function parsePrintingFormData(ocrText: string): any {
   const copies = extractValue(ocrText, ['No. of copies', 'No of copies', 'Copies', 'NO. OF COPIES']);
   data.No_of_copies = copies ? parseInt(copies) || null : null;
   
-  const totalPages = extractValue(ocrText, ['Total No. of printed pages', 'Total pages', 'Total No of printed pages', 'TOTAL NO. OF PRINTED PAGES']);
+  const totalPages = extractValue(ocrText, ['Total No. of printed pages', 'Total pages', 'Total No of printed pages', 'TOTAL NO. OF PRINTED PAGES', 'Total printed']);
   data.Total_No_of_printed_pages = totalPages ? parseInt(totalPages) || null : null;
   
-  // Extract checkbox fields (Other requests)
-  data.Other_request_Single_sided = hasCheckbox(ocrText, ['Single sided', 'Single-sided', 'SINGLE SIDED']) ? 1 : 0;
-  data.Other_request_Double_sided = hasCheckbox(ocrText, ['Double sided', 'Double-sided', 'DOUBLE SIDED']) ? 1 : 0;
-  data.Other_request_Stapling = hasCheckbox(ocrText, ['Stapling', 'STAPLING']) ? 1 : 0;
-  data.Other_request_No_stapling_required = hasCheckbox(ocrText, ['No stapling', 'No Stapling', 'NO STAPLING']) ? 1 : 0;
-  data.Other_request_White_paper = hasCheckbox(ocrText, ['White paper', 'White Paper', 'WHITE PAPER']) ? 1 : 0;
-  data.Other_request_Newsprint_paper = hasCheckbox(ocrText, ['Newsprint', 'News print', 'NEWSPRINT']) ? 1 : 0;
+  // Check if Ricoh or Toshiba is circled - if so, put Total_No_of_printed_pages value
+  const ricohCircled = isCircled(ocrText, ['RICOH', 'Ricoh']);
+  const toshibaCircled = isCircled(ocrText, ['TOSHIBA', 'Toshiba']);
   
-  // Extract text fields
-  data.Remarks = extractValue(ocrText, ['Remarks', 'REMARKS', 'Notes', 'NOTES']);
-  data.Signed_by = extractValue(ocrText, ['Signed by', 'Signature', 'Signed By', 'SIGNED BY']);
-  
-  // Office use fields
-  data.For_office_use_RICOH = extractValue(ocrText, ['RICOH', 'Ricoh']);
-  data.For_office_use_Toshiba = extractValue(ocrText, ['TOSHIBA', 'Toshiba']);
-  
-  // Table data - extract if present (simplified)
-  data.Table_Form = '';
-  data.Table_Class = '';
-  data.Table_No_of_copies = '';
-  data.Table_Teacher_in_Charge = '';
+  data.Ricoh = ricohCircled && data.Total_No_of_printed_pages 
+    ? String(data.Total_No_of_printed_pages) 
+    : '';
+    
+  data.Toshiba = toshibaCircled && data.Total_No_of_printed_pages 
+    ? String(data.Total_No_of_printed_pages) 
+    : '';
   
   return data;
 }
