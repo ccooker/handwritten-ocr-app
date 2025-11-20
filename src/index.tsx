@@ -836,7 +836,7 @@ app.get('/table', (c) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Printing Forms Table View</title>
+        <title>Printing Forms Table View - 8 Essential Fields</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
         <style>
@@ -845,11 +845,11 @@ app.get('/table', (c) => {
             max-width: 100%;
           }
           table {
-            min-width: 2000px;
+            min-width: 1200px;
           }
           th, td {
             white-space: nowrap;
-            padding: 8px 12px;
+            padding: 12px 16px;
             border: 1px solid #e5e7eb;
           }
           th {
@@ -859,19 +859,32 @@ app.get('/table', (c) => {
             color: white;
             font-weight: 600;
             z-index: 10;
+            text-align: left;
           }
-          .checkbox-col {
-            text-align: center;
+          .number-col {
+            text-align: right;
+          }
+          .ricoh-col {
+            background-color: #fef3c7;
+          }
+          .toshiba-col {
+            background-color: #dbeafe;
+          }
+          tr:hover {
+            background-color: #f9fafb;
           }
         </style>
     </head>
     <body class="bg-gray-50">
         <div class="container mx-auto px-4 py-8">
             <div class="mb-6 flex justify-between items-center">
-                <h1 class="text-3xl font-bold text-gray-800">
-                    <i class="fas fa-table mr-2 text-blue-600"></i>
-                    Printing Forms Table View
-                </h1>
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-800">
+                        <i class="fas fa-table mr-2 text-blue-600"></i>
+                        Printing Forms Table View
+                    </h1>
+                    <p class="text-gray-600 mt-1">8 Essential Fields</p>
+                </div>
                 <a href="/" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
                     <i class="fas fa-arrow-left mr-2"></i>
                     Back to Upload
@@ -888,7 +901,7 @@ app.get('/table', (c) => {
                         <i class="fas fa-download mr-2"></i>
                         Export CSV
                     </button>
-                    <span id="recordCount" class="ml-auto text-gray-600"></span>
+                    <span id="recordCount" class="ml-auto text-gray-600 font-semibold"></span>
                 </div>
                 
                 <div class="table-container">
@@ -898,41 +911,36 @@ app.get('/table', (c) => {
                                 <th>ID</th>
                                 <th>Filename</th>
                                 <th>Upload Date</th>
-                                <th>RECEIVED_DATE</th>
                                 <th>Class</th>
                                 <th>Subject</th>
-                                <th>Teacher_in_charge</th>
-                                <th>Date_of_submission</th>
-                                <th>Date_of_collection</th>
-                                <th>Received_by</th>
-                                <th>No_of_pages_original_copy</th>
-                                <th>No_of_copies</th>
-                                <th>Total_No_of_printed_pages</th>
-                                <th class="checkbox-col">Single_sided</th>
-                                <th class="checkbox-col">Double_sided</th>
-                                <th class="checkbox-col">Stapling</th>
-                                <th class="checkbox-col">No_stapling</th>
-                                <th class="checkbox-col">White_paper</th>
-                                <th class="checkbox-col">Newsprint_paper</th>
-                                <th>Remarks</th>
-                                <th>Signed_by</th>
-                                <th>RICOH</th>
-                                <th>Toshiba</th>
-                                <th>Table_Form</th>
-                                <th>Table_Class</th>
-                                <th>Table_No_of_copies</th>
-                                <th>Table_Teacher_in_Charge</th>
+                                <th>Teacher-in-charge</th>
+                                <th class="number-col">Pages (Original)</th>
+                                <th class="number-col">No. of Copies</th>
+                                <th class="number-col">Total Printed</th>
+                                <th class="ricoh-col">Ricoh</th>
+                                <th class="toshiba-col">Toshiba</th>
                             </tr>
                         </thead>
                         <tbody id="tableBody">
                             <tr>
-                                <td colspan="27" class="text-center py-8 text-gray-500">
+                                <td colspan="11" class="text-center py-8 text-gray-500">
                                     <i class="fas fa-spinner fa-spin mr-2"></i>
                                     Loading data...
                                 </td>
                             </tr>
                         </tbody>
                     </table>
+                </div>
+            </div>
+            
+            <div class="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h3 class="font-semibold text-blue-800 mb-2">
+                    <i class="fas fa-info-circle mr-2"></i>
+                    Legend
+                </h3>
+                <div class="text-sm text-blue-700 space-y-1">
+                    <p><span class="inline-block w-4 h-4 bg-yellow-200 border border-yellow-300 mr-2"></span> Ricoh - Shows total pages if Ricoh is circled</p>
+                    <p><span class="inline-block w-4 h-4 bg-blue-200 border border-blue-300 mr-2"></span> Toshiba - Shows total pages if Toshiba is circled</p>
                 </div>
             </div>
         </div>
@@ -952,7 +960,8 @@ app.get('/table', (c) => {
                     if (forms.length === 0) {
                         tbody.innerHTML = \`
                             <tr>
-                                <td colspan="27" class="text-center py-8 text-gray-500">
+                                <td colspan="11" class="text-center py-8 text-gray-500">
+                                    <i class="fas fa-inbox mr-2"></i>
                                     No data available. Upload some printing forms first.
                                 </td>
                             </tr>
@@ -962,40 +971,25 @@ app.get('/table', (c) => {
                     
                     tbody.innerHTML = forms.map(form => \`
                         <tr class="hover:bg-gray-50">
-                            <td>\${form.id}</td>
-                            <td>\${form.filename || ''}</td>
-                            <td>\${formatDate(form.upload_date)}</td>
-                            <td>\${form.RECEIVED_DATE || ''}</td>
-                            <td>\${form.Class || ''}</td>
-                            <td>\${form.Subject || ''}</td>
-                            <td>\${form.Teacher_in_charge || ''}</td>
-                            <td>\${form.Date_of_submission || ''}</td>
-                            <td>\${form.Date_of_collection || ''}</td>
-                            <td>\${form.Received_by || ''}</td>
-                            <td class="text-right">\${form.No_of_pages_original_copy || ''}</td>
-                            <td class="text-right">\${form.No_of_copies || ''}</td>
-                            <td class="text-right">\${form.Total_No_of_printed_pages || ''}</td>
-                            <td class="checkbox-col">\${form.Other_request_Single_sided ? '✓' : ''}</td>
-                            <td class="checkbox-col">\${form.Other_request_Double_sided ? '✓' : ''}</td>
-                            <td class="checkbox-col">\${form.Other_request_Stapling ? '✓' : ''}</td>
-                            <td class="checkbox-col">\${form.Other_request_No_stapling_required ? '✓' : ''}</td>
-                            <td class="checkbox-col">\${form.Other_request_White_paper ? '✓' : ''}</td>
-                            <td class="checkbox-col">\${form.Other_request_Newsprint_paper ? '✓' : ''}</td>
-                            <td>\${form.Remarks || ''}</td>
-                            <td>\${form.Signed_by || ''}</td>
-                            <td>\${form.For_office_use_RICOH || ''}</td>
-                            <td>\${form.For_office_use_Toshiba || ''}</td>
-                            <td>\${form.Table_Form || ''}</td>
-                            <td>\${form.Table_Class || ''}</td>
-                            <td>\${form.Table_No_of_copies || ''}</td>
-                            <td>\${form.Table_Teacher_in_Charge || ''}</td>
+                            <td class="font-semibold text-gray-700">\${form.id}</td>
+                            <td class="text-blue-600">\${form.filename || ''}</td>
+                            <td class="text-gray-600">\${formatDate(form.upload_date)}</td>
+                            <td class="font-medium">\${form.Class || '-'}</td>
+                            <td>\${form.Subject || '-'}</td>
+                            <td>\${form.Teacher_in_charge || '-'}</td>
+                            <td class="number-col font-medium">\${form.No_of_pages_original_copy || '-'}</td>
+                            <td class="number-col font-medium">\${form.No_of_copies || '-'}</td>
+                            <td class="number-col font-bold text-blue-600">\${form.Total_No_of_printed_pages || '-'}</td>
+                            <td class="ricoh-col font-semibold text-center">\${form.Ricoh || '-'}</td>
+                            <td class="toshiba-col font-semibold text-center">\${form.Toshiba || '-'}</td>
                         </tr>
                     \`).join('');
                 } catch (error) {
                     console.error('Error loading data:', error);
                     document.getElementById('tableBody').innerHTML = \`
                         <tr>
-                            <td colspan="27" class="text-center py-8 text-red-500">
+                            <td colspan="11" class="text-center py-8 text-red-500">
+                                <i class="fas fa-exclamation-triangle mr-2"></i>
                                 Error loading data: \${error.message}
                             </td>
                         </tr>
@@ -1018,31 +1012,26 @@ app.get('/table', (c) => {
                         return;
                     }
                     
+                    // Only 8 essential fields + metadata
                     const headers = [
-                        'ID', 'Filename', 'Upload Date', 'RECEIVED_DATE', 'Class', 'Subject',
-                        'Teacher_in_charge', 'Date_of_submission', 'Date_of_collection',
-                        'Received_by', 'No_of_pages_original_copy', 'No_of_copies',
-                        'Total_No_of_printed_pages', 'Single_sided', 'Double_sided',
-                        'Stapling', 'No_stapling', 'White_paper', 'Newsprint_paper',
-                        'Remarks', 'Signed_by', 'RICOH', 'Toshiba', 'Table_Form',
-                        'Table_Class', 'Table_No_of_copies', 'Table_Teacher_in_Charge'
+                        'ID', 'Filename', 'Upload Date', 
+                        'Class', 'Subject', 'Teacher-in-charge',
+                        'No. of Pages (Original)', 'No. of Copies', 'Total Printed Pages',
+                        'Ricoh', 'Toshiba'
                     ];
                     
                     const rows = forms.map(form => [
-                        form.id, form.filename, form.upload_date, form.RECEIVED_DATE,
-                        form.Class, form.Subject, form.Teacher_in_charge,
-                        form.Date_of_submission, form.Date_of_collection, form.Received_by,
-                        form.No_of_pages_original_copy, form.No_of_copies,
+                        form.id,
+                        form.filename,
+                        form.upload_date,
+                        form.Class,
+                        form.Subject,
+                        form.Teacher_in_charge,
+                        form.No_of_pages_original_copy,
+                        form.No_of_copies,
                         form.Total_No_of_printed_pages,
-                        form.Other_request_Single_sided ? 'Yes' : 'No',
-                        form.Other_request_Double_sided ? 'Yes' : 'No',
-                        form.Other_request_Stapling ? 'Yes' : 'No',
-                        form.Other_request_No_stapling_required ? 'Yes' : 'No',
-                        form.Other_request_White_paper ? 'Yes' : 'No',
-                        form.Other_request_Newsprint_paper ? 'Yes' : 'No',
-                        form.Remarks, form.Signed_by, form.For_office_use_RICOH,
-                        form.For_office_use_Toshiba, form.Table_Form, form.Table_Class,
-                        form.Table_No_of_copies, form.Table_Teacher_in_Charge
+                        form.Ricoh,
+                        form.Toshiba
                     ].map(val => {
                         // Escape values containing commas or quotes
                         const str = (val || '').toString();
@@ -1058,7 +1047,7 @@ app.get('/table', (c) => {
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = 'printing_forms_' + new Date().toISOString().split('T')[0] + '.csv';
+                    a.download = 'printing_forms_8_fields_' + new Date().toISOString().split('T')[0] + '.csv';
                     a.click();
                     window.URL.revokeObjectURL(url);
                 }).catch(error => {
