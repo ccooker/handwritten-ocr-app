@@ -541,52 +541,134 @@ Example format:
   throw new Error('No valid JSON found in AI response');
 }
 
-// Extract data using Google Gemini
+// Extract data using Google Gemini (Latest Model: gemini-2.0-flash-exp)
 async function extractWithGemini(base64Image: string, mimeType: string, apiKey: string): Promise<any> {
-  const prompt = `You are an expert in data extraction from handwritten documents. Extract all data from this printing request form and return it as JSON.
+  const prompt = `You are an expert in data extraction from handwritten documents, with a meticulous eye for detail and accuracy. Your task is to extract specific data points from the provided handwritten printing request form image.
 
-Extract these fields: RECEIVED_DATE, Class, Subject, Teacher_in_charge, Date_of_submission, Date_of_collection, Received_by, No_of_pages_original_copy, No_of_copies, Total_No_of_printed_pages, Other_request_Single_sided, Other_request_Double_sided, Other_request_Stapling, Other_request_No_stapling_required, Other_request_White_paper, Other_request_Newsprint_paper, Remarks, Signed_by, For_office_use_RICOH, For_office_use_Toshiba.
+Extract the following fields with precision:
+1. RECEIVED_DATE - Date when form was received
+2. Class - Student class/grade
+3. Subject - Subject or topic
+4. Teacher_in_charge - Teacher's name
+5. Date_of_submission - When submitted
+6. Date_of_collection - When to collect
+7. Received_by - Name of receiver
+8. No_of_pages_original_copy - Number of original pages
+9. No_of_copies - Number of copies requested
+10. Total_No_of_printed_pages - Total pages to print
+11. Other_request_Single_sided - Boolean (true if checkbox marked)
+12. Other_request_Double_sided - Boolean (true if checkbox marked)
+13. Other_request_Stapling - Boolean (true if checkbox marked)
+14. Other_request_No_stapling_required - Boolean (true if checkbox marked)
+15. Other_request_White_paper - Boolean (true if checkbox marked)
+16. Other_request_Newsprint_paper - Boolean (true if checkbox marked)
+17. Remarks - Any additional remarks
+18. Signed_by - Signature name
+19. For_office_use_RICOH - Office use field for RICOH
+20. For_office_use_Toshiba - Office use field for Toshiba
+21. Table_Form - Table field: Form
+22. Table_Class - Table field: Class
+23. Table_No_of_copies - Table field: Number of copies
+24. Table_Teacher_in_Charge - Table field: Teacher name
 
-Return ONLY valid JSON with exact field names. Use empty string for missing text, null for missing numbers, false for unchecked boxes.`;
+IMPORTANT INSTRUCTIONS:
+- For missing or illegible text fields, use empty string ""
+- For missing numbers, use null
+- For unchecked checkboxes, use false
+- For checked checkboxes, use true
+- Return ONLY a valid JSON object with these exact field names
+- Do not include any explanatory text, only the JSON object
 
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=${apiKey}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      contents: [{
-        parts: [
-          { text: prompt },
-          {
-            inline_data: {
-              mime_type: mimeType,
-              data: base64Image
+Example format:
+{
+  "RECEIVED_DATE": "2024-01-15",
+  "Class": "10A",
+  "Subject": "Mathematics",
+  ...
+}`;
+
+  // Try latest experimental model first (gemini-2.0-flash-exp)
+  // If it fails, fallback to stable production model (gemini-1.5-flash)
+  const models = [
+    'gemini-2.0-flash-exp',  // Latest experimental model with best accuracy
+    'gemini-1.5-flash'        // Stable production model as fallback
+  ];
+
+  let lastError: Error | null = null;
+
+  for (const model of models) {
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: prompt },
+              {
+                inline_data: {
+                  mime_type: mimeType,
+                  data: base64Image
+                }
+              }
+            ]
+          }],
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 2048,
+            topP: 0.95,
+            topK: 40
+          },
+          safetySettings: [
+            {
+              category: "HARM_CATEGORY_HARASSMENT",
+              threshold: "BLOCK_ONLY_HIGH"
+            },
+            {
+              category: "HARM_CATEGORY_HATE_SPEECH",
+              threshold: "BLOCK_ONLY_HIGH"
+            },
+            {
+              category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+              threshold: "BLOCK_ONLY_HIGH"
+            },
+            {
+              category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+              threshold: "BLOCK_ONLY_HIGH"
             }
-          }
-        ]
-      }],
-      generationConfig: {
-        temperature: 0.1,
-        maxOutputTokens: 1000
+          ]
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Gemini API (${model}) failed: ${response.status} - ${errorText}`);
       }
-    })
-  });
 
-  if (!response.ok) {
-    throw new Error(`Gemini API failed: ${response.status}`);
+      const data = await response.json();
+      const content = data.candidates[0]?.content?.parts[0]?.text || '';
+      
+      // Parse JSON from response
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        console.log(`Successfully extracted data using ${model}`);
+        return parsed;
+      }
+      
+      throw new Error('No valid JSON found in AI response');
+      
+    } catch (error) {
+      console.error(`Failed with ${model}:`, error);
+      lastError = error as Error;
+      // Continue to next model
+    }
   }
 
-  const data = await response.json();
-  const content = data.candidates[0]?.content?.parts[0]?.text || '';
-  
-  // Parse JSON from response
-  const jsonMatch = content.match(/\{[\s\S]*\}/);
-  if (jsonMatch) {
-    return JSON.parse(jsonMatch[0]);
-  }
-  
-  throw new Error('No valid JSON found in AI response');
+  // All models failed
+  throw lastError || new Error('All Gemini models failed');
 }
 
 // Parse printing form data from OCR text
