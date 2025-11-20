@@ -529,28 +529,36 @@ Example format:
 
 // Extract data using Google Gemini (Latest Model: gemini-2.0-flash-exp)
 async function extractWithGemini(base64Image: string, mimeType: string, apiKey: string): Promise<any> {
-  const prompt = `You are an expert in data extraction from handwritten documents, with a meticulous eye for detail and accuracy. Your task is to extract specific data points from the provided handwritten printing request form image.
+  const prompt = `You are an expert in data extraction from handwritten documents, with a meticulous eye for detail and accuracy. Your task is to extract ONLY HANDWRITTEN TEXT from the provided printing request form image.
 
-Extract ONLY the following 8 fields:
-1. Class - Student class/grade (e.g., "5A", "Primary 3")
-2. Subject - Subject or topic
-3. Teacher_in_charge - Teacher's name
-4. No_of_pages_original_copy - Number of original pages (numeric value only)
-5. No_of_copies - Number of copies requested (numeric value only)
-6. Total_No_of_printed_pages - Total pages to print (numeric value only)
-7. Ricoh - IMPORTANT: If "Ricoh" is circled/selected, put the value from Total_No_of_printed_pages here. Otherwise empty string.
-8. Toshiba - IMPORTANT: If "Toshiba" is circled/selected, put the value from Total_No_of_printed_pages here. Otherwise empty string.
+CRITICAL: Extract ONLY handwritten text, NOT printed labels or form structure.
 
-CRITICAL INSTRUCTIONS:
-- Remove ALL "#" symbols from extracted text (e.g., "Class #5A" becomes "Class 5A")
-- For Ricoh field: Check if "Ricoh" is circled/checked/selected. If YES, copy the Total_No_of_printed_pages value here. If NO, use empty string "".
-- For Toshiba field: Check if "Toshiba" is circled/checked/selected. If YES, copy the Total_No_of_printed_pages value here. If NO, use empty string "".
-- For missing or illegible text fields, use empty string ""
-- For missing numbers, use null
+Look for HANDWRITTEN entries in these 8 fields:
+1. Class - HANDWRITTEN class/grade only (e.g., "5A", "Primary 3")
+2. Subject - HANDWRITTEN subject/topic only
+3. Teacher_in_charge - HANDWRITTEN teacher's name only
+4. No_of_pages_original_copy - HANDWRITTEN number only (numeric value)
+5. No_of_copies - HANDWRITTEN number only (numeric value)
+6. Total_No_of_printed_pages - HANDWRITTEN total number only (numeric value)
+7. Ricoh - If "Ricoh" is circled/checked with pen/pencil, put the HANDWRITTEN total pages value here
+8. Toshiba - If "Toshiba" is circled/checked with pen/pencil, put the HANDWRITTEN total pages value here
+
+CRITICAL EXTRACTION RULES:
+- IGNORE all printed text on the form (labels, instructions, form fields)
+- ONLY extract handwritten pen/pencil text
+- Look for filled-in boxes, circled items, or written text
+- Remove ALL "#" symbols from handwritten text
+- For Ricoh: Only if you see a handwritten circle/check around "Ricoh", copy the handwritten total pages
+- For Toshiba: Only if you see a handwritten circle/check around "Toshiba", copy the handwritten total pages
+- For missing handwritten text fields, use empty string ""
+- For missing handwritten numbers, use null
 - Return ONLY a valid JSON object with these exact 8 field names
-- Do not include any explanatory text, only the JSON object
 
-Example format (when Ricoh is circled):
+Examples of HANDWRITTEN vs PRINTED:
+❌ PRINTED: "Class:" "Subject:" "Teacher in charge:" (ignore these)
+✅ HANDWRITTEN: "5A" "Mathematics" "John Doe" (extract these)
+
+Example output (when Ricoh is circled by hand):
 {
   "Class": "5A",
   "Subject": "Mathematics",
@@ -562,7 +570,7 @@ Example format (when Ricoh is circled):
   "Toshiba": ""
 }
 
-Example format (when Toshiba is circled):
+Example output (when Toshiba is circled by hand):
 {
   "Class": "Primary 3",
   "Subject": "Science",
